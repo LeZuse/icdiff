@@ -54,6 +54,7 @@ color_mapping = {
     "description": "blue",
     "meta": "magenta",
     "line-numbers": "white",
+    "text": "white"
 }
 
 
@@ -260,7 +261,7 @@ class ConsoleDiff(object):
                        self._format_line(*todata))
 
     def _format_line(self, linenum, text):
-        text = text.rstrip()
+        text = simple_colorize(text.rstrip(), "text")
         if not self.line_numbers:
             return text
         return self._add_line_numbers(linenum, text)
@@ -276,7 +277,7 @@ class ConsoleDiff(object):
             self._rpad(simple_colorize(str(lid), "line-numbers"), 8), text)
 
     def _real_len(self, s):
-        s_len = 0
+        l = 0
         in_esc = False
         prev = ' '
         for c in replace_all({'\0+': "",
@@ -290,12 +291,12 @@ class ConsoleDiff(object):
             else:
                 if c == "[" and prev == "\033":
                     in_esc = True
-                    s_len -= 1  # we counted prev when we shouldn't have
+                    l -= 1  # we counted prev when we shouldn't have
                 else:
-                    s_len += self._display_len(c)
+                    l += self._display_len(c)
             prev = c
 
-        return s_len
+        return l
 
     def _rpad(self, s, field_width):
         return self._pad(s, field_width) + s
@@ -354,8 +355,15 @@ class ConsoleDiff(object):
 
     def _generate_table(self, fromdesc, todesc, diffs):
         if fromdesc or todesc:
+            file_separator = simple_colorize('-', "description") * (self.cols // 2 - 1)
+
+            yield ('\n', '\n')
+            yield (file_separator, file_separator)
+
             yield (simple_colorize(fromdesc, "description"),
                    simple_colorize(todesc, "description"))
+
+            yield (file_separator, file_separator)
 
         for i, line in enumerate(diffs):
             if line is None:
@@ -492,8 +500,7 @@ def create_option_parser():
                       type="string",
                       dest='labels',
                       help="override file labels with arbitrary tags. "
-                      "Use twice, one for each file. You may include the "
-                      "formatting strings '{path}' and '{basename}'")
+                      "Use twice, one for each file")
     parser.add_option("-N", "--line-numbers", default=False,
                       action="store_true",
                       help="generate output with line numbers. Not compatible "
@@ -635,23 +642,10 @@ def read_file(fname, options):
         raise
 
 
-def format_label(path, label="{path}"):
-    """Format a label using a file's path and basename.
-
-    Example:
-      For file `/foo/bar.py` and label "Yours: {basename}" -
-      The ouptut is "Yours: bar.py"
-    """
-    return label.format(path=path, basename=os.path.basename(path))
-
-
 def diff_files(options, a, b):
     if options.labels:
         if len(options.labels) == 2:
-            headers = [
-                format_label(a, options.labels[0]),
-                format_label(b, options.labels[1]),
-            ]
+            headers = options.labels
         else:
             codec_print("error: to use arbitrary file labels, "
                         "specify -L twice.", options)
